@@ -25,6 +25,7 @@
     "Microsoft.AspNetCore.Mvc.Razor.Host": "1.0.0-*",
     "Microsoft.AspNetCore.Mvc.ViewFeatures": "1.0.0-*",
     "Microsoft.CodeAnalysis.CSharp": "1.3.0-*",
+    "Microsoft.DiaSymReader": "1.0.8-*",
     "Microsoft.Extensions.FileProviders.Composite": "1.0.0-*",
     "Microsoft.Extensions.HashCodeCombiner.Sources": {
       "version": "1.0.0-*",

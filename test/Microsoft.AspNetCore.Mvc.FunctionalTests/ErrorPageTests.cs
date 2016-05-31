@@ -6,7 +6,6 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text.Encodings.Web;
 using System.Threading.Tasks;
-using Microsoft.AspNetCore.Mvc.Razor.Internal;
 using Xunit;
 
 namespace Microsoft.AspNetCore.Mvc.FunctionalTests
@@ -68,16 +67,6 @@ namespace Microsoft.AspNetCore.Mvc.FunctionalTests
         [Fact]
         public async Task RuntimeErrorAreListedByErrorPageMiddleware()
         {
-            // The desktop CLR does not correctly read the stack trace from portable PDBs. However generating full pdbs
-            // is only supported on machines with CLSID_CorSymWriter available. On desktop, we'll skip this test on 
-            // machines without this component.
-#if NET451
-            if (!SymbolsUtility.SupportsFullPdbGeneration())
-            {
-                return;
-            }
-#endif
-
             // Arrange
             var expectedMessage = HtmlEncoder.Default.Encode("throw new Exception(\"Error from view\");");
             var expectedMediaType = MediaTypeHeaderValue.Parse("text/html; charset=utf-8");
