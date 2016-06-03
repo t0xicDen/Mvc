@@ -344,7 +344,7 @@ namespace Microsoft.AspNetCore.Mvc.ModelBinding
         }
 
         [Fact]
-        public void CreateBinder_Caches_InteriorNodes()
+        public void CreateBinder_Caches_NonRootNodes()
         {
             // Arrange
             var metadataProvider = new TestModelMetadataProvider();
@@ -387,7 +387,7 @@ namespace Microsoft.AspNetCore.Mvc.ModelBinding
             var context = new ModelBinderFactoryContext()
             {
                 Metadata = metadataProvider.GetMetadataForType(typeof(Widget)),
-                CacheToken = null, // We want the provider to run twice.
+                CacheToken = null, // We want the outermost provider to run twice.
             };
 
             // Act
@@ -402,7 +402,7 @@ namespace Microsoft.AspNetCore.Mvc.ModelBinding
         }
 
         [Fact]
-        public void CreateBinder_Caches_InteriorNodes_WhenInteriorNodeReturnsNull()
+        public void CreateBinder_Caches_NonRootNodes_WhenNonRootNodeReturnsNull()
         {
             // Arrange
             var metadataProvider = new TestModelMetadataProvider();
@@ -446,7 +446,7 @@ namespace Microsoft.AspNetCore.Mvc.ModelBinding
             var context = new ModelBinderFactoryContext()
             {
                 Metadata = metadataProvider.GetMetadataForType(typeof(Widget)),
-                CacheToken = null, // We want the provider to run twice.
+                CacheToken = null, // We want the outermost provider to run twice.
             };
 
             // Act
@@ -463,7 +463,7 @@ namespace Microsoft.AspNetCore.Mvc.ModelBinding
         // The fact that we use the ModelMetadata as the token is important for caching
         // and sharing with TryUpdateModel.
         [Fact]
-        public void CreateBinder_Caches_InteriorNodes_UsesModelMetadataAsToken()
+        public void CreateBinder_Caches_NonRootNodes_UsesModelMetadataAsToken()
         {
             // Arrange
             var metadataProvider = new TestModelMetadataProvider();
@@ -519,10 +519,10 @@ namespace Microsoft.AspNetCore.Mvc.ModelBinding
         // blow up in wierd ways.
         //
         // If a binder provider tries to recursively create itself, but then returns null, we've
-        // already returned and possibly cached the DelegatingBinder instance, we want to make sure that
+        // already returned and possibly cached the PlaceholderBinder instance, we want to make sure that
         // instance won't nullref.
         [Fact]
-        public void CreateBinder_Caches_InteriorNodes_FixesUpDelegatingBinder()
+        public void CreateBinder_Caches_NonRootNodes_FixesUpPlaceholderBinder()
         {
             // Arrange
             var metadataProvider = new TestModelMetadataProvider();

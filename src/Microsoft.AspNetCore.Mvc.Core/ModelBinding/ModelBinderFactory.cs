@@ -9,7 +9,6 @@ using System.Linq;
 using System.Runtime.CompilerServices;
 using Microsoft.AspNetCore.Mvc.Core;
 using Microsoft.AspNetCore.Mvc.Internal;
-using Microsoft.AspNetCore.Mvc.ModelBinding.Internal;
 using Microsoft.AspNetCore.Mvc.ModelBinding.Metadata;
 using Microsoft.Extensions.Internal;
 using Microsoft.Extensions.Options;
@@ -79,7 +78,7 @@ namespace Microsoft.AspNetCore.Mvc.ModelBinding
                 return binder;
             }
 
-            // We're definitely creating a binder for an interior node here, so it's OK for binder creation
+            // We're definitely creating a binder for an non-root node here, so it's OK for binder creation
             // to fail.
             binder = CreateBinderCoreUncached(providerContext, token) ?? NoOpBinder.Instance;
 
@@ -103,10 +102,14 @@ namespace Microsoft.AspNetCore.Mvc.ModelBinding
             // happen looking at just model metadata.
             var key = new Key(providerContext.Metadata, token);
 
-            // If we're currently recursively building a binder for this type, just return
-            // a PlaceholderBinder. We'll fix it up later to point to the 'real' binder
-            // when the stack unwinds.
-            var collection = providerContext.Collection;
+            // The providerContext.Visited is used here to break cycles in recursion. We need a separate
+            // per-operation cache for cycle breaking because the global cache (_cache) needs to always stay
+            // in a valid state.
+            //
+            // We store null as a sentinel inside the providerContext.Visited to track the fact that we've visited
+            // a given node but haven't yet created a binder for it. We don't want to eagerly create a
+            // PlaceholderBinder because that would result in lots of unnecessary indirection and allocations.
+            var collection = providerContext.Visited;
 
             IModelBinder binder;
             if (collection.TryGetValue(key, out binder))
@@ -116,7 +119,9 @@ namespace Microsoft.AspNetCore.Mvc.ModelBinding
                     return binder;
                 }
 
-                // Recursion detected, create a DelegatingBinder.
+                // If we're currently recursively building a binder for this type, just return
+                // a PlaceholderBinder. We'll fix it up later to point to the 'real' binder
+                // when the stack unwinds.
                 binder = new PlaceholderBinder();
                 collection[key] = binder;
                 return binder;
@@ -138,13 +143,13 @@ namespace Microsoft.AspNetCore.Mvc.ModelBinding
                 }
             }
 
-            // If the DelegatingBinder was created, then it means we recursed. Hook it up to the 'real' binder.
-            var delegatingBinder = collection[key] as PlaceholderBinder;
-            if (delegatingBinder != null)
+            // If the PlaceholderBinder was created, then it means we recursed. Hook it up to the 'real' binder.
+            var placeholderBinder = collection[key] as PlaceholderBinder;
+            if (placeholderBinder != null)
             {
                 // It's also possible that user code called into `CreateBinder` but then returned null, we don't
                 // want to create something that will null-ref later so just hook this up to the no-op binder.
-                delegatingBinder.Inner = result ?? NoOpBinder.Instance;
+                placeholderBinder.Inner = result ?? NoOpBinder.Instance;
             }
 
             if (result != null)
@@ -170,6 +175,8 @@ namespace Microsoft.AspNetCore.Mvc.ModelBinding
 
         private bool TryGetCachedBinder(ModelMetadata metadata, object cacheToken, out IModelBinder binder)
         {
+            Debug.Assert(metadata != null);
+
             if (cacheToken == null)
             {
                 binder = null;
@@ -199,7 +206,7 @@ namespace Microsoft.AspNetCore.Mvc.ModelBinding
                 };
 
                 MetadataProvider = _factory._metadataProvider;
-                Collection = new Dictionary<Key, IModelBinder>();
+                Visited = new Dictionary<Key, IModelBinder>();
             }
 
             private DefaultModelBinderProviderContext(
@@ -210,7 +217,7 @@ namespace Microsoft.AspNetCore.Mvc.ModelBinding
 
                 _factory = parent._factory;
                 MetadataProvider = parent.MetadataProvider;
-                Collection = parent.Collection;
+                Visited = parent.Visited;
 
                 BindingInfo = new BindingInfo()
                 {
@@ -227,8 +234,7 @@ namespace Microsoft.AspNetCore.Mvc.ModelBinding
 
             public override IModelMetadataProvider MetadataProvider { get; }
 
-            // Not using a 'real' Stack<> because we want random access to modify the entries.
-            public Dictionary<Key, IModelBinder> Collection { get; }
+            public Dictionary<Key, IModelBinder> Visited { get; }
 
             public override IModelBinder CreateBinder(ModelMetadata metadata)
             {
@@ -237,8 +243,8 @@ namespace Microsoft.AspNetCore.Mvc.ModelBinding
                     throw new ArgumentNullException(nameof(metadata));
                 }
 
-                // For interior nodes we use the ModelMetadata as the cache token. This ensures that all interior
-                // nodes with the same metadata will have the the same binder. This is OK because for an interior
+                // For non-root nodes we use the ModelMetadata as the cache token. This ensures that all non-root
+                // nodes with the same metadata will have the the same binder. This is OK because for an non-root
                 // node there's no opportunity to customize binding info like there is for a parameter.
                 var token = metadata;
 
@@ -254,7 +260,6 @@ namespace Microsoft.AspNetCore.Mvc.ModelBinding
         // the ParameterDescriptor) or in a call to TryUpdateModel (no BindingInfo) or as a collection element.
         //
         // We need to be able to tell the difference between these things to avoid over-caching.
-        [DebuggerDisplay("{ToString(),nq}")]
         private struct Key : IEquatable<Key>
         {
             private readonly ModelMetadata _metadata;
